@@ -1,245 +1,363 @@
-import 'package:english_words/english_words.dart'; // Generador de palabras aleatorias
-import 'package:flutter/material.dart'; // Framework principal de Flutter
-import 'package:provider/provider.dart'; // Gestión de estado reactivo
+import 'package:english_words/english_words.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+// Punto de entrada principal de la aplicación Flutter
 void main() {
-  runApp(MyApp());
+  runApp(MyApp()); // Inicia la aplicación y muestra el widget MyApp
 }
 
-// Aplicación principal: StatelessWidget porque no tiene estado mutable
+// Clase principal que representa la aplicación
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => MyAppState(),
+      // Proveedor de estado para que MyAppState esté disponible en todo el árbol de widgets
+      create: (context) => MyAppState(),
       child: MaterialApp(
-        title: 'Namify',
+        title: 'Namify', // Título de la aplicación
         theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
+          useMaterial3: true, // Habilita el diseño Material 3
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange), // Define un esquema de colores basado en un color base
         ),
-        home: MyHomePage(),
+        home: MyHomePage(), // Define la página inicial
       ),
     );
   }
 }
 
-// Clase para gestionar el estado de la aplicación
+// Clase que gestiona el estado de la aplicación (nombres, historial, favoritos)
 class MyAppState extends ChangeNotifier {
-  var current = WordPair.random(); // Palabra actual generada aleatoriamente.
-  var favorites = <WordPair>[]; // Lista de palabras favoritas.
+  var current = WordPair.random(); // Genera un par de palabras aleatorias
+  var history = <WordPair>[]; // Lista para almacenar el historial de palabras generadas
+  GlobalKey? historyListKey; // Llave global para animar la lista de historial
 
-  // Genera una nueva palabra aleatoria.
+  // Genera un nuevo par de palabras y actualiza el historial
   void getNext() {
-    current = WordPair.random(); // Cambia la palabra actual.
-    notifyListeners(); // Notifica a los widgets que el estado cambió.
+    history.insert(0, current); // Inserta el par actual al inicio del historial
+    var animatedList = historyListKey?.currentState as AnimatedListState?;
+    animatedList?.insertItem(0); // Anima la inserción en la lista
+    current = WordPair.random(); // Genera un nuevo par de palabras
+    notifyListeners(); // Notifica a los widgets que usan este estado
   }
 
-  // Alterna entre agregar y eliminar la palabra actual de los favoritos.
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current); // Si ya está en favoritos, la elimina.
+  var favorites = <WordPair>[]; // Lista de pares de palabras marcados como favoritos
+
+  // Alterna entre agregar o quitar un par de palabras de los favoritos
+  void toggleFavorite([WordPair? pair]) {
+    pair = pair ?? current; // Si no se pasa un par, usa el par actual
+    if (favorites.contains(pair)) {
+      favorites.remove(pair); // Si ya está en favoritos, lo elimina
     } else {
-      favorites.add(current); // Si no está, la agrega.
+      favorites.add(pair); // Si no está en favoritos, lo agrega
     }
-    notifyListeners(); // Notifica a los widgets que el estado cambió.
+    notifyListeners(); // Notifica a los widgets que usan este estado
   }
 
-  // Elimina una palabra de la lista de favoritos.
-  void removeFromFavorites(WordPair pair) {
-    favorites.remove(pair); // Elimina la palabra de la lista.
-    notifyListeners(); // Notifica a los widgets que el estado cambió.
+  // Elimina un par específico de la lista de favoritos
+  void removeFavorite(WordPair pair) {
+    favorites.remove(pair);
+    notifyListeners();
   }
 }
 
-// Página principal con riel de navegación responsivo
+// Widget principal que controla la navegación entre páginas
 class MyHomePage extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState(); // Crea el estado asociado.
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int selectedIndex = 0; // Índice seleccionado del riel de navegación.
+  var selectedIndex = 0; // Índice para rastrear la página seleccionada
 
   @override
   Widget build(BuildContext context) {
-    // Determina qué página mostrar según el índice seleccionado.
-    Widget page;
+    var colorScheme = Theme.of(context).colorScheme; // Esquema de colores del tema actual
+
+    Widget page; // Define qué página mostrar
     switch (selectedIndex) {
       case 0:
-        page = GeneratorPage(); // Página principal de generación de palabras.
+        page = GeneratorPage(); // Página de generación de palabras
         break;
       case 1:
-        page = FavoritesPage(); // Página de favoritos.
+        page = FavoritesPage(); // Página de favoritos
         break;
       default:
-        throw UnimplementedError('No widget for $selectedIndex'); // Error si el índice no es válido.
+        throw UnimplementedError('No hay widget para $selectedIndex');
     }
 
-    // LayoutBuilder ajusta el diseño según el tamaño disponible.
-    return LayoutBuilder(builder: (context, constraints) {
-      return Scaffold(
-        body: Row(
-          children: [
-            SafeArea(
-              // Asegura que los widgets no se solapen con áreas sensibles del dispositivo.
-              child: NavigationRail(
-                // Riel de navegación lateral.
-                extended: constraints.maxWidth >= 600, // Expande etiquetas si el ancho es suficiente.
-                destinations: const [
-                  // Definición de las opciones del riel.
-                  NavigationRailDestination(
-                    icon: Icon(Icons.home), // Ícono de la opción "Home".
-                    label: Text('Home'), // Etiqueta "Home".
+    // Contenedor para la página actual, con fondo y animación
+    var mainArea = ColoredBox(
+      color: colorScheme.surfaceContainerHighest, // Color de fondo
+      child: AnimatedSwitcher(
+        duration: Duration(milliseconds: 200), // Duración de la animación de cambio
+        child: page, // Página seleccionada
+      ),
+    );
+
+    return Scaffold(
+      body: LayoutBuilder(
+        // Determina el diseño según el ancho de la pantalla
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 450) {
+            // Diseño móvil: barra de navegación inferior
+            return Column(
+              children: [
+                Expanded(child: mainArea), // Área principal
+                SafeArea(
+                  child: BottomNavigationBar(
+                    items: [
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.home), // Icono de la página principal
+                        label: 'Home',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(Icons.favorite), // Icono de favoritos
+                        label: 'Favorites',
+                      ),
+                    ],
+                    currentIndex: selectedIndex, // Índice actual
+                    onTap: (value) {
+                      setState(() {
+                        selectedIndex = value; // Cambia la página al tocar
+                      });
+                    },
                   ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.favorite), // Ícono de la opción "Favorites".
-                    label: Text('Favorites'), // Etiqueta "Favorites".
+                )
+              ],
+            );
+          } else {
+            // Diseño para pantallas más anchas: barra de navegación lateral
+            return Row(
+              children: [
+                SafeArea(
+                  child: NavigationRail(
+                    extended: constraints.maxWidth >= 600, // Expande si la pantalla es lo suficientemente ancha
+                    destinations: [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home), // Icono de la página principal
+                        label: Text('Home'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.favorite), // Icono de favoritos
+                        label: Text('Favorites'),
+                      ),
+                    ],
+                    selectedIndex: selectedIndex, // Índice actual
+                    onDestinationSelected: (value) {
+                      setState(() {
+                        selectedIndex = value; // Cambia la página al seleccionar
+                      });
+                    },
                   ),
-                ],
-                selectedIndex: selectedIndex, // Índice seleccionado actualmente.
-                onDestinationSelected: (value) {
-                  // Acción al seleccionar una opción.
-                  setState(() {
-                    selectedIndex = value; // Cambia el índice seleccionado.
-                  });
-                },
-              ),
-            ),
-            Expanded(
-              // Ocupa el espacio restante en la pantalla.
-              child: Container(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: page, // Muestra la página seleccionada.
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+                ),
+                Expanded(child: mainArea), // Área principal
+              ],
+            );
+          }
+        },
+      ),
+    );
   }
 }
 
-// Página para generar palabras aleatorias.
+// Página para generar nuevos pares de palabras
 class GeneratorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>(); // Obtiene el estado global.
-    var pair = appState.current; // Palabra actual.
-    var isFavorite = appState.favorites.contains(pair); // Verifica si es favorita.
+    var appState = context.watch<MyAppState>(); // Obtiene el estado de la aplicación
+    var pair = appState.current; // Par de palabras actual
+
+    IconData icon; // Define el ícono para el botón de favoritos
+    if (appState.favorites.contains(pair)) {
+      icon = Icons.favorite; // Ícono de favorito activado
+    } else {
+      icon = Icons.favorite_border; // Ícono de favorito desactivado
+    }
 
     return Center(
-      // Centra el contenido en la pantalla.
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center, // Centra verticalmente.
+        mainAxisAlignment: MainAxisAlignment.center, // Centra el contenido verticalmente
         children: [
-          BigCard(pair: pair), // Muestra la palabra en un "BigCard".
-          const SizedBox(height: 10), // Espaciado vertical.
+          Expanded(
+            flex: 3,
+            child: HistoryListView(), // Muestra el historial de palabras generadas
+          ),
+          SizedBox(height: 10),
+          BigCard(pair: pair), // Muestra el par de palabras actual
+          SizedBox(height: 10),
           Row(
-            mainAxisSize: MainAxisSize.min, // Ajusta el tamaño a lo necesario.
+            mainAxisSize: MainAxisSize.min,
             children: [
               ElevatedButton.icon(
-                onPressed: appState.toggleFavorite, // Alterna favoritos.
-                icon: Icon(isFavorite
-                    ? Icons.favorite
-                    : Icons.favorite_border), // Ícono dinámico según favorito.
-                label: const Text('Like'), // Etiqueta del botón.
+                onPressed: () {
+                  appState.toggleFavorite(); // Alterna el estado de favorito
+                },
+                icon: Icon(icon), // Ícono según el estado de favorito
+                label: Text('Like'),
               ),
-              const SizedBox(width: 10), // Espaciado horizontal.
+              SizedBox(width: 10),
               ElevatedButton(
-                onPressed: appState.getNext, // Genera una nueva palabra.
-                child: const Text('Next'), // Etiqueta del botón.
+                onPressed: () {
+                  appState.getNext(); // Genera un nuevo par de palabras
+                },
+                child: Text('Next'),
               ),
             ],
           ),
+          Spacer(flex: 2), // Espaciador para centrar el contenido
         ],
       ),
     );
   }
 }
 
-// Página para mostrar la lista de favoritos con opción para eliminarlos.
+// Widget que muestra una tarjeta con el par de palabras actual
+class BigCard extends StatelessWidget {
+  const BigCard({
+    Key? key,
+    required this.pair,
+  }) : super(key: key);
+
+  final WordPair pair; // Par de palabras a mostrar
+
+  @override
+  Widget build(BuildContext context) {
+    var theme = Theme.of(context); // Tema actual
+    var style = theme.textTheme.displayMedium!.copyWith(
+      color: theme.colorScheme.onPrimary, // Color del texto sobre el fondo primario
+    );
+
+    return Card(
+      color: theme.colorScheme.primary, // Color de la tarjeta
+      child: Padding(
+        padding: const EdgeInsets.all(20), // Espaciado interno
+        child: AnimatedSize(
+          duration: Duration(milliseconds: 200), // Animación para cambios de tamaño
+          child: MergeSemantics(
+            child: Wrap(
+              children: [
+                Text(
+                  pair.first, // Primera palabra
+                  style: style.copyWith(fontWeight: FontWeight.w200),
+                ),
+                Text(
+                  pair.second, // Segunda palabra
+                  style: style.copyWith(fontWeight: FontWeight.bold),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Página para mostrar y gestionar los favoritos
 class FavoritesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>(); // Obtiene el estado global.
-    var favorites = appState.favorites; // Lista de favoritos.
+    var theme = Theme.of(context); // Tema actual
+    var appState = context.watch<MyAppState>(); // Estado de la aplicación
 
-    if (favorites.isEmpty) {
-      // Muestra un mensaje si no hay favoritos.
+    if (appState.favorites.isEmpty) {
       return Center(
-        child: Text(
-          'No favorites yet.',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
+        child: Text('No favorites yet.'), // Mensaje si no hay favoritos
       );
     }
 
-    // Muestra la lista de favoritos.
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start, // Alinea los widgets al lado izquierdo
       children: [
         Padding(
-          // Espaciado alrededor del texto.
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            'You have ${favorites.length} favorites:',
-            style: Theme.of(context).textTheme.headlineSmall,
+          padding: const EdgeInsets.all(30),
+          child: Text('You have '
+              '${appState.favorites.length} favorites:'), // Muestra el número de favoritos
+        ),
+        Expanded(
+          child: GridView(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 400, // Ancho máximo de cada celda
+              childAspectRatio: 400 / 80, // Proporción de las celdas
+            ),
+            children: [
+              for (var pair in appState.favorites)
+                ListTile(
+                  leading: IconButton(
+                    icon: Icon(Icons.delete_outline, semanticLabel: 'Delete'),
+                    color: theme.colorScheme.primary, // Color del ícono
+                    onPressed: () {
+                      appState.removeFavorite(pair); // Elimina un favorito
+                    },
+                  ),
+                  title: Text(
+                    pair.asLowerCase, // Muestra el par de palabras en minúsculas
+                    semanticsLabel: pair.asPascalCase, // Lectura en formato PascalCase
+                  ),
+                ),
+            ],
           ),
         ),
-        for (var pair in favorites)
-          ListTile(
-            leading: Icon(Icons.favorite, color: Theme.of(context).colorScheme.primary), // Ícono.
-            title: Text(pair.asPascalCase), // Muestra la palabra favorita.
-            trailing: IconButton(
-              // Botón para eliminar de favoritos.
-              icon: Icon(Icons.delete, color: Theme.of(context).colorScheme.error),
-              onPressed: () {
-                appState.removeFromFavorites(pair); // Elimina de favoritos.
-              },
-            ),
-          ),
       ],
     );
   }
 }
 
-// Widget personalizado para mostrar la palabra actual en un diseño atractivo.
-class BigCard extends StatelessWidget {
-  const BigCard({super.key, required this.pair}); // Constructor con la palabra.
+// Lista animada que muestra el historial de pares generados
+class HistoryListView extends StatefulWidget {
+  const HistoryListView({Key? key}) : super(key: key);
 
-  final WordPair pair; // Palabra que se mostrará.
+  @override
+  State<HistoryListView> createState() => _HistoryListViewState();
+}
+
+class _HistoryListViewState extends State<HistoryListView> {
+  final _key = GlobalKey(); // Llave global para el manejo del historial
+
+  // Gradiente para dar un efecto de desvanecimiento en la lista
+  static const Gradient _maskingGradient = LinearGradient(
+    colors: [Colors.transparent, Colors.black],
+    stops: [0.0, 0.5],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context); // Obtiene el tema actual.
-    final textStyle = theme.textTheme.displayMedium!.copyWith(
-      // Configura el estilo del texto.
-      color: theme.colorScheme.onPrimary, // Color del texto según el tema.
-      fontWeight: FontWeight.bold, // Negrita para destacar.
-    );
+    final appState = context.watch<MyAppState>(); // Obtiene el estado de la aplicación
+    appState.historyListKey = _key; // Vincula la llave con el estado
 
-    return Center(
-      child: SizedBox(
-        width: 350, // Ancho del card.
-        child: Card(
-          // Tarjeta con fondo y sombra.
-          color: theme.colorScheme.primary, // Color del fondo de la tarjeta.
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0), // Bordes redondeados.
-          ),
-          elevation: 5, // Sombra para el efecto de elevación.
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0), // Espaciado interno.
-            child: Text(
-              pair.asPascalCase, // Muestra la palabra en formato PascalCase.
-              style: textStyle, // Aplica el estilo definido.
-              textAlign: TextAlign.center, // Centra el texto.
-              semanticsLabel: "${pair.first} ${pair.second}", // Etiqueta para lectores de pantalla.
+    return ShaderMask(
+      shaderCallback: (bounds) => _maskingGradient.createShader(bounds), // Aplica el gradiente
+      blendMode: BlendMode.dstIn, // Combina el gradiente con la lista
+      child: AnimatedList(
+        key: _key, // Usa la llave para gestionar animaciones
+        reverse: true, // Invierte el orden de la lista (elementos nuevos arriba)
+        padding: EdgeInsets.only(top: 100), // Espaciado superior
+        initialItemCount: appState.history.length, // Número inicial de elementos
+        itemBuilder: (context, index, animation) {
+          final pair = appState.history[index]; // Par de palabras en la posición actual
+          return SizeTransition(
+            sizeFactor: animation, // Animación de tamaño al aparecer
+            child: Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  appState.toggleFavorite(pair); // Alterna el estado de favorito
+                },
+                icon: appState.favorites.contains(pair)
+                    ? Icon(Icons.favorite, size: 12) // Ícono si es favorito
+                    : SizedBox(), // Sin ícono si no es favorito
+                label: Text(
+                  pair.asLowerCase, // Muestra el par de palabras en minúsculas
+                  semanticsLabel: pair.asPascalCase, // Lectura en PascalCase
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
